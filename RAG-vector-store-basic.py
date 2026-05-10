@@ -1,5 +1,8 @@
+from langchain.agents import create_agent
+from langchain_core.tools import create_retriever_tool
 from dotenv import load_dotenv
 import os
+from rich import print
 
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import PGVector
@@ -34,4 +37,24 @@ vector_store = PGVector.from_texts(
     connection_string=CONNECTION_STRING,
 )
 
-print(vector_store.similarity_search("Where is the cat?", k=2))
+retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+retriever_tool = create_retriever_tool(
+    retriever,
+    name="vector_store_retriever",
+    description="Use this tool to retrieve relevant information from the vector store based on a query.",
+)
+
+llm = ChatOpenAI(
+    model=OPENAI_MODEL_IDENTIFIER,
+    base_url=OPENAI_BASE_URL,
+    api_key=OPENAI_API_KEY,  # pyright: ignore
+)
+
+agent = create_agent(
+    model=llm,
+    tools=[retriever_tool],
+    system_prompt="You are a helpful assistant that can retrieve relevant information from a vector store. Use the vector_store_retriever tool to fetch relevant information when asked.",
+)
+
+results = agent.invoke({"messages": [{"role": "user", "content": "Where is the cat?"}]})
+print(results["messages"][-1].content)
